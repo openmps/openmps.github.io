@@ -6,7 +6,7 @@ author (attribution)
 URL
 : https://github.com/aokomoriuta
 
-This project contains web pages about [OpenMPS](https://bitbucket.org/OpenMps/openmps).
+This project contains [web pages](http://openmps.bitbucket.org) about [OpenMPS](https://bitbucket.org/OpenMps/openmps).
 
 Otherwise noted, all documents are multi-licensed as following:
 
