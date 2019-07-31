@@ -1,0 +1,440 @@
+<!DOCTYPE HTML>
+<html lang="ja">
+
+	<head>
+		<meta charset="utf-8" />
+
+		<title>本当は速いOpenMPS</title>
+
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML" />
+		<meta name="author" content="aokomoriuta" />
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" />
+
+		<link rel="stylesheet" href="css/reveal.css" />
+		<link rel="stylesheet" href="css/theme/white.css" id="theme" />
+
+		<link rel="stylesheet" href="index.css" />
+
+		<!-- Code syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css" />
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section>
+					<h1>本当は速いOpenMPS</h1>
+					<p>青子守歌 (aokomoriuta)</p>
+					<time>2016/07/30</time>
+				</section>
+
+				<section id="toc">
+					<h3>TOC</h3>
+					<ol class="toc">
+						<li>自己紹介</li>
+						<li>はじめに</li>
+						<li>OpenMPSの高速化</li>
+						<li>OpenMPSの高精度化</li>
+						<li>開発予定・まとめ</li>
+					</ol>
+				</section>
+
+				<section>
+					<h2>自己紹介</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li class="recent">自己紹介</li>
+							<li>はじめに</li>
+							<li>OpenMPSの高速化</li>
+							<li>OpenMPSの高精度化</li>
+							<li>開発予定・まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>だれ？</h3>
+						<p>青子守歌（あお こもりうた）</p>
+						<img style="width: 50%" src="http://www.gravatar.com/avatar/c6aed1d933f89e2baf09882cd18bb81a?s=2048" />
+					</section>
+
+					<section>
+						<h3>なんのひと？</h3>
+						<dl>
+							<dt>Twitter</dt>
+							<dd><a href="https://twitter.com/aokomoriuta">@aokomoriuta</a></dd>
+							<dt>Blog</dt>
+							<dd><a href="http://aokomoriuta.hateblo.jp/">aokomoriuta's blog</a></dd>
+							<dt>専門分野（？）</dt>
+							<dd>土木工学・水理学・計算力学・プログラム高速化・C++er</dd>
+							<dt>オープンCAE勉強会</dt>
+							<dd><ul>
+								<li><a href="http://openmps.bitbucket.org/doc/presentations/20140222/opencaekanto36.odp">2014年2月22日『OpenMPSみんな使ってねー』</a></li>
+								<li><a href="https://vimeo.com/149863096">2015年5月31日『OpenFOAMのGPGPU版オープンソース実装「RapidCFD」を試す』</a></li>
+								<li>今日</li>
+							</ul></dd>
+						</dl>
+					</section>
+
+					<section>
+						<h3>今日は？</h3>
+						<p style="font-size: 200%">OpenMPS開発者として<br />来ました</p>
+					</section>
+				</section>
+
+				<section>
+					<h2>はじめに</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>自己紹介</li>
+							<li class="recent">はじめに</li>
+							<li>OpenMPSの高速化</li>
+							<li>OpenMPSの高精度化</li>
+							<li>開発予定・まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>OpenMPSとは</h3>
+						<p>粒子法のひとつ<strong>MPS法</strong>のオープンソース実装</p>
+						<p>詳しくは<a href="http://openmps.bitbucket.org/">ウェブサイト</a>参照</p>
+					</section>
+
+					<section>
+						<h3>OpenMPSを使ってみた人達の声1</h3>
+						<figure>
+							<img src="img/cap.PNG" />
+							<img style="width: 100%" src="img/cap2.PNG" />
+							<figcaption><a href="http://s.webry.info/sp/13053239.at.webry.info/201504/article_8.html">http://s.webry.info/sp/13053239.at.webry.info/201504/article_8.html</a></figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>OpenMPSを使ってみた人達の声2</h3>
+						<ol>
+							<dt>Aさん</dt>
+							<dd>「めっちゃ重い」</dd>
+							<dt>Bさん</dt>
+							<dd>「すぐ発散する」</dd>
+							<dt>Cさん</dt>
+							<dd>「実験と全然合わない」</dd>
+						</ol>
+					</section>
+
+					<section>
+						<h3>...</h3>
+						<p>ごめん</p>
+					</section>
+
+					<section>
+						<h3>言い訳</h3>
+						<p>OpenMPSのmasterは<br /><strong>「MPS法（粒子法）を勉強する人向け」のつもり</strong>（でした）</p>
+						<ul>
+							<li>標準MPS法の素直な（読みやすい？）実装</li>
+							<li>速度・精度は気にしない</li>
+							<li>応用に当たっては各自、改良を頑張れ</li>
+						</ul>
+						<p>でも別にどこかに明記してはなかった</p>
+						<p>実際、まともなのはOpenMPS-dev（非公開レポジトリ）で開発</p>
+					</section>
+
+					<section>
+						<h3>OpenMPSを使ってみた人達の声3</h3>
+						<p>とあるTwitterにて（要約）</p>
+						<ol style="list-style-type: none">
+							<li>Dさん「粒子法興味ある」</li>
+							<li>Eさん「OpenMPSってのがあるらしいよ」</li>
+							<li>Dさん「お、使ってみるわ！」</li>
+							<li>Eさん「どうだった？」</li>
+							<li>Dさん「なんか計算終わらないし暴発してるっぽい…」</li>
+							<li>Eさん「やっぱり<strong>粒子法はクソ</strong>だな！」</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>もしかして</h3>
+						<p>OpenMPSが、MPS法（粒子法）の<br />世間評価を下げている！？</p>
+					</section>
+
+					<section>
+						<h3>方針転換</h3>
+						<p>masterで本気の開発しよう！！</p>
+						<ul>
+							<li>高速な計算</li>
+							<li>最新論文による高精度手法</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>時系列</h3>
+						<dl>
+							<dt>2013年10月</dt>
+							<dd>OpenMPS公開(<a href="https://bitbucket.org/OpenMps/openmps/commits/tag/StandardMPS-v1.0">v1.0</a>)</dd>
+							<dt>2014年12月</dt>
+							<dd>素朴な実装の最後(<a href="https://bitbucket.org/OpenMps/openmps/commits/tag/v1.3">v1.3</a>)</dd>
+							<dt>2016年04月</dt>
+							<dd>非公開レポジトリを公開(<a href="https://bitbucket.org/OpenMps/openmps/commits/branch/dev">dev</a>)</dd>
+							<dt>2016年07月</dt>
+							<dd>devを参考に高速化・高精度化を導入(<a href="https://bitbucket.org/OpenMps/openmps/commits/tag/v2.0">v2.0</a>)</dd>
+							<dt>2016年08月-</dt>
+							<dd>引き続き開発継続(<a href="https://bitbucket.org/OpenMps/openmps/commits/branch/master">master</a>)</dd>
+						</dl>
+					</section>
+
+					<section>
+						<h3>ということで</h3>
+						<p>OpenMPSは変わりました。</p>
+						<p>その成果をご覧あれ。</p>
+						<p><small>※時間等々の都合上、MPS法の基礎理論を含め細かい話はしません。参考文献をお読みください。</small></p>
+					</section>
+				</section>
+				
+				<section>
+					<h2>OpenMPSの高速化</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>自己紹介</li>
+							<li>はじめに</li>
+							<li class="recent">OpenMPSの高速化</li>
+							<li>OpenMPSの高精度化</li>
+							<li>開発予定・まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>高速化</h3>
+						<p>v1.3→v2.0</p>
+						<ul>
+							<li>正方格子による近傍粒子探索</li>
+							<li>行列計算を<a href="http://www.boost.org/doc/libs/release/libs/numeric/ublas/">boost::uBLAS</a>→<a href="http://viennacl.sourceforge.net/">ViennaCL</a></li>
+							<li>OpenMPによるスレッド並列化</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>加速率</h3>
+						<p>約7万粒子を10ステップ計算<small>（Win10, AMD-FX-8350, DDR3-1600）</small></p>
+						<table>
+							<thead>
+								<tr><th>バージョン</th><th>計算時間[s]</th><th>加速率</th></tr>
+							</thead>
+							<tbody>
+								<tr><th>v1.3</th><td>38482</td><td>x1.0</td></tr>
+								<tr><th>近傍粒子探索の改善</th><td>1210</td><td>x31.8</td></tr>
+								<tr><th>ViennaCL</th><td>733</td><td>x52.5</td></tr>
+								<tr><th>OpenMP</th><td>252</td><td>x152.7</td></tr>
+							</tbody>
+						</table>
+					</section>
+				</section>
+				
+				
+				<section>
+					<h2>OpenMPSの高精度化</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>自己紹介</li>
+							<li>はじめに</li>
+							<li>OpenMPSの高速化</li>
+							<li class="recent">OpenMPSの高精度化</li>
+							<li>開発予定・まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>高精度化</h3>
+						<p>オリジナルMPS法<small>(Koshizuka and Oka, 1996)</small>は、かなり問題がある</p>
+						<p>→高精度粒子法の導入</p>
+						<ul>
+							<li>HS法（高精度生成項）, <small>Khayyer and Gotoh (2009)</small></li>
+							<li>HL法（高精度ラプラシアン）, <small>Khayyer and Gotoh (2010)</small></li>
+							<li>GC法（勾配修正行列）, <small>Khayyer and Gotoh (2011)</small></li>
+							<li>ECS法（誤差修正項）, <small>Khayyer and Gotoh (2011)</small></li>
+							<li>DS法（動的人工斥力）, <small>Tsuruta et al. (2013)</small></li>
+						</ul>
+						<p>詳しくはGotoh and Khayyer (2016)を参照</p>
+					</section>
+
+					<section>
+						<h3>計算例1</h3>
+						<p>20cm四方の水槽でのダムブレーク（空間解像度：1mm）</p>
+						<div>
+							<figure style="float: left; width: 30%">
+								<div>
+									<video src="img/MPS.mp4" controls="1" autoplay="1" loop="1" />
+								</div>
+								<figcaption>オリジナルMPS</figcaption>
+							</figure>
+							<figure style="float: left; width: 30%">
+								<div>
+									<video src="img/MPS-HS.mp4" controls="1" autoplay="1" loop="1" />
+								</div>
+								<figcaption>MPS-HS</figcaption>
+							</figure>
+							<figure style="float: left; width: 30%">
+								<div>
+									<video src="img/MPS-HS-HL.mp4" controls="1" autoplay="1" loop="1" />
+								</div>
+								<figcaption>MPS-HS-HL</figcaption>
+							</figure>
+							<p style="clear: both" />
+						</div>
+						<div>
+							<figure style="float: left; width: 30%">
+								<div>
+									<video src="img/MPS-HS-HL-GC.mp4" controls="1" autoplay="1" loop="1" />
+								</div>
+								<figcaption>MPS-HS-HL-ECS</figcaption>
+							</figure>
+							<figure style="float: left; width: 30%">
+								<div>
+									<video src="img/MPS-HS-HL-GC-ECS.mp4" controls="1" autoplay="1" loop="1" />
+								</div>
+								<figcaption>MPS-HS-HL-ECS-GC</figcaption>
+							</figure>
+							<figure style="float: left; width: 30%">
+								<div>
+									<video src="img/MPS-HS-HL-GC-ECS-DS.mp4" controls="1" autoplay="1" loop="1" />
+								</div>
+								<figcaption>MPS-HS-HL-ECS-DS</figcaption>
+							</figure>
+							<p style="clear: both" />
+						</div>
+					</section>
+
+					<section>
+						<h3>計算例2</h3>
+						<p>8cm四方の水槽でのスロッシング？（空間解像度：0.2mm）</p>
+						<div>
+							<video style="width: 60%" src="img/2.mp4" controls="1" autoplay="1" loop="1" />
+						</div>
+						<figcaption>MPS-HS-HL-ECS-DS</figcaption>
+					</section>
+
+					<section>
+						<h3>計算例2の流速ベクトル図</h3>
+						<div>
+							<video style="width: 60%" src="img/2_u.mp4" controls="1" autoplay="1" loop="1" />
+						</div>
+						<figcaption>MPS-HS-HL-ECS-DS</figcaption>
+					</section>
+				</section>
+				
+				<section>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>自己紹介</li>
+							<li>はじめに</li>
+							<li>OpenMPSの高速化</li>
+							<li>OpenMPSの高精度化</li>
+							<li class="recent">開発予定・まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>直近の開発予定</h3>
+						<p>優先度順</p>
+						<ol>
+							<li>Tsuruta et al. (2015)のSPPを導入</li>
+							<li>V&V</li>
+							<li>MPI並列化（おそらく<a href="https://github.com/FDPS/FDPS">FDPS</a>の導入）</li>
+							<li>SIMD化(AVX2 or AVX-512)</li>
+							<li>剛体連成</li>
+							<li>GPGPU版の公開<small>（コード自体は既に非公開レポジトリにある）</small></li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>歓迎！</h3>
+						<dl>
+							<dt>機能要望・バグ報告</dt>
+							<dd><a href="https://bitbucket.org/OpenMps/openmps/issues">Bitbucket Issue</a>までお気軽に！</dd>
+							<dt>サポート（？）</dt>
+							<dd>「動かない」「なんか遅い」「結果が合わない」なども遠慮なくご相談ください<small>（Issue, Twitter reply/DM等へ）</small>。できる限り最大限の範囲で協力します。</dd>
+							<dt>共同開発者</dt>
+							<dd><a href="https://bitbucket.org/OpenMps/openmps/pull-requests/">プルリク</a>もお待ちしています。</dd>
+						</dl>
+					</section>
+
+					<section>
+						<h3>まとめ</h3>
+						<ol>
+							<li>OpenMPSをまともなアプリケーションにすることにした</li>
+							<li>近傍粒子探索手法を変え、ViennaCLやOpenMPでで高速化した</li>
+							<li>MPS-HS-HL-GC-ECS-DSで高精度化した</li>
+							<li>これからも開発は続いていきます</li>
+							<li>機能要望・バグ報告・相談・共同開発を歓迎します！</li>
+						</ol>
+					</section>
+					
+					<section>
+						<h3>参考文献</h3>
+						<ol style="font-size: 65%">
+							<li>Koshizuka S, Oka Y (1996) "Moving particle semi-implicit method for fragmentation of incompressible fluid", Nucl Sci Eng, 123:421–434.</li>
+							<li>Khayyer A, Gotoh H (2009): "Modified moving particle semi-implicit methods for the prediction of 2D wave impact pressure" Coast Eng, 56:419–440.</li>
+							<li>Khayyer A, Gotoh H (2010): "A higher order laplacian model for enhancement and stabilization of pressure calculation by the MPS method", Appl Ocean Res, 32(1):124–131.</li>
+							<li>Khayyer A, Gotoh H (2011): "Enhancement of stability and accuracy of the moving particle semi-implicit method", J Comput Phys, 230:3093–3118.</li>
+							<li>Tsuruta N, Khayyer A, Gotoh H (2013): "A short note on dynamic stabilization of moving particle semi-implicit method", Comput Fluids, 82:158–164.</li>
+							<li>Tsuruta N, Khayyer A, Gotoh H (2015): "Space potential particles to enhance the stability of projection-based particle methods", Int J Comput Fluid Dyn, 29(1):100–119</li>
+							<li>Gotoh H, Khayyer A (2016): "Current achievements and future perspectives for projection-based particle methods with applications in ocean engineering", J Ocean Eng Mar. Energy, 2:251.</li>
+						</ol>
+					</section>
+
+					<section>
+						<p style="font-size: 300%">return 0;</p>
+					</section>
+				</section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+
+			// Full list of configuration options available at:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+				slideNumber: true,
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				// Optional reveal.js plugins
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/math/math.js', async: true }
+				]
+			});
+		</script>
+	</body>
+</html>

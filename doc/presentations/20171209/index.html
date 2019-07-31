@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="ja">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>粒子法オープンソース実装OpenMPSのV&amp;V</title>
+
+		<meta name="description" content="粒子法オープンソース実装OpenMPSのV&amp;V" />
+		<meta name="author" content="YOSHIFUJI Naoki" />
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/mystyle.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h1 style="font-size: 190%"><span>粒子法オープンソース実装</span>OpenMPSのV&amp;V</h1>
+					<p>OpenMPSプロジェクト</p>
+					<p><span style="font-weight: bold">&#x20bb7;藤尚生</span></p>
+					<time>2017/12/09</time>
+					<p>[オープンCAEシンポジウム2017一般講演C14]</p>
+				</section>
+
+				<section>
+					<h2>概要</h2>
+					<section>
+						<h3>コード検証</h3>
+						<figure style="width: 60%">
+							<img src="img/openmps1d.png" />
+							<figcaption>1次元版OpenMPSを開発＆比較</figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>静水問題</h3>						
+						<figure style="width: 25%;">
+							<video src="img/static_pressure.mp4" controls="1" loop="1" />
+						</figure>
+					</section>
+
+					<section>
+						<h3>自由表面位置の比較</h3>
+						<figure style="width: 75%">
+							<img src="img/validation.svg" />
+							<figcaption>時間変化</figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>成果</h3>
+						<ul style="font-size: 80%">
+							<li>MPSを単純化した1次元版、<strong>OpenMps1D</strong>を開発した</li>
+							<li>OpenMps1Dと本流OpenMPSを比較し、<strong>コード検証</strong>した</li>
+							<li>コード<strong>誤りが2件</strong>発見＆修正できた</li>
+							<li>静水問題で<strong>妥当性確認</strong>を実施した</li>
+							<li>高精度粒子法を用いる時、<strong>時間刻みを粗くすると体積保存に難</strong></li>
+							<li>動きの少ない問題では、時間刻みを<strong>CFL条件よりかなり細かく</strong>する必要がある</li>
+						</ul>
+					</section>
+				</section>
+
+				<section id="toc">
+					<h3>目次</h3>
+					<ol class="toc">
+						<li>概要</li>
+						<li>OpenMPSとは</li>
+						<li>OpenMPS1Dによるコード検証</li>
+						<li>静水問題による妥当性確認</li>
+						<li>まとめ</li>
+					</ol>
+				</section>
+
+				<section>
+					<h2>OpenMPSとは</h2>
+					<section class="toc">
+						<h3>目次</h3>
+						<ol class="toc">
+							<li>概要</li>
+							<li class="recent">OpenMPSとは</li>
+							<li>OpenMPS1Dによるコード検証</li>
+							<li>静水問題による妥当性確認</li>
+							<li>まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>OpenMPSとは</h3>
+						<p><strong>MPS法</strong>のオープンソース実装</p>
+						<p>詳しくは<a href="http://openmps.bitbucket.io/">openmps.bitbucket.io</a>参照</p>
+					</section>
+
+					<section>
+						<h3>こんな計算ができます</h3>
+						<video style="width: 50%" src="img/MPS-HS-HL-GC-ECS-DS.mp4" controls="1" loop="1" />
+					</section>
+
+					<section>
+						<h3>なぜMPS法？</h3>
+						<div>
+							<ul>
+								<li>射影法型粒子法だから</li>
+								<li>ISPHより先発であり、研究実績などが豊富だから</li>
+							</ul>
+						</div>
+						<p>※MPSとSPHは <span>もはや<strong>空間離散化手法の違い</strong>でしかない<sup>(4)</sup></span></p>
+					</section>
+
+					<section>
+						<h3>MPS法の流れ</h3>
+						<ol>
+							<li><strong>重力</strong>と<strong>粘性</strong>により移動</li>
+							<li>（粒子数）密度を保つような<strong>圧力</strong>を計算</li>
+							<li><strong>圧力勾配</strong>により移動</li>
+						</ol>
+						<figure style="width: 80%">
+							<svg viewBox="0 0 470 100" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+								<defs>
+									<circle id="particle" r="9.5" stroke="black" />
+									<g id="particle_line">
+										<use xlink:href="#particle" x="10" />
+										<use xlink:href="#particle" x="30" />
+										<use xlink:href="#particle" x="50" />
+										<use xlink:href="#particle" x="70" />
+									</g>
+									<g id="water">
+										<use xlink:href="#particle_line" y="10" fill="lightblue" />
+										<use xlink:href="#particle_line" y="30" fill="lightblue" />
+										<use xlink:href="#particle_line" y="50" fill="lightblue" />
+										<use xlink:href="#particle_line" y="70" fill="lightblue" />
+									</g>
+									<use id="wall" xlink:href="#particle_line" fill="gray" />
+
+									<polygon id="arrow_base" points="0,10 18,10 18,4 30,15 18,26 18,20 0,20" fill="yellow" stroke="black" />
+									<use id="arrow" xlink:href="#arrow_base" y="35" />
+
+									<marker id="gravity_head" viewBox="0 -5 10 10" refX="8" refY="0"
+										markerWidth="5" markerHeight="5"orient="auto-start-reverse">
+										<polygon points="0,5 10,0 0,-5" fill="black" />
+									</marker>
+									<line id="gravity_base" x1="0" y1="0" x2="0" y2="18" stroke="black" stroke-width="2" marker-end="url(#gravity_head)" />
+									<use id="gravity" xlink:href="#gravity_base" y="70" />
+
+									<marker id="pressure_head" viewBox="0 -5 10 10" refX="8" refY="0"
+										markerWidth="5" markerHeight="5"orient="auto-start-reverse">
+										<polygon points="0,5 10,0 0,-5" fill="magenta" />
+									</marker>
+									<line id="pressure_base" x1="0" y1="25" x2="0" y2="0" stroke="magenta" stroke-width="2" marker-end="url(#pressure_head)" />
+									<use id="pressure" xlink:href="#pressure_base" y="60" />
+								</defs>
+
+								<line stroke="black" x1="0" y1="80" x2="470" y2="80" stroke-width="0.5" />
+
+								<use xlink:href="#water" x="0" y="0"/>
+								<use xlink:href="#wall"  x="0" y="90"/>
+
+								<use xlink:href="#arrow" x="90" />
+
+								<use xlink:href="#wall"  x="130" y="90"/>
+								<use xlink:href="#water" x="130" y="8"/>
+
+								<use xlink:href="#arrow" x="220" />
+
+								<use xlink:href="#wall"  x="260" y="90"/>
+								<use xlink:href="#water" x="260" y="8"/>
+
+								<use xlink:href="#arrow" x="350" />
+
+								<use xlink:href="#water" x="390" y="0"/>
+								<use xlink:href="#wall"  x="390" y="90"/>
+
+								<use xlink:href="#gravity" x="10" />
+								<use xlink:href="#gravity" x="30" />
+								<use xlink:href="#gravity" x="50" />
+								<use xlink:href="#gravity" x="70" />
+
+								<line stroke="magenta" x1="120" y1="80" x2="220" y2="80" />
+								<line stroke="magenta" x1="120" y1="88" x2="220" y2="88" />
+
+								<use xlink:href="#pressure" x="270" />
+								<use xlink:href="#pressure" x="290" />
+								<use xlink:href="#pressure" x="310" />
+								<use xlink:href="#pressure" x="330" />
+							</svg>
+						</figure>
+						<p>詳しくは参考文献<sup>(1)</sup>参照</p>
+					</section>
+
+					<section>
+						<h3>高精度粒子法</h3>
+						<p>オリジナルMPS法<sup>(1)</sup>を<strong>かなり改善</strong></p>
+						<ul style="font-size: 80%">
+							<li>HS法（高精度生成項）、<small>Khayyer and Gotoh (2009)</small></li>
+							<li>HL法（高精度ラプラシアン）、<small>Khayyer and Gotoh (2010)</small></li>
+							<li>GC法（勾配修正行列）、<small>Khayyer and Gotoh (2011)</small></li>
+							<li>ECS法（誤差修正項）、<small>Khayyer and Gotoh (2011)</small></li>
+							<li>DS法（動的人工斥力）、<small>Tsuruta et al. (2013)</small></li>
+						</ul>
+						<p>詳しくはGotoh and Khayyer (2016)を参照</p>
+					</section>
+
+					<section>
+						<h3>OpenMPSの特徴</h3>
+						<ul>
+							<li>MPS法のオープンソース実装</li>
+							<li>高精度粒子法が導入済み</li>
+							<li>V&amp;Vが十分とは言えない</li>
+						</ul>
+						<p>今回、簡単なV&amp;Vを実施した</p>
+					</section>
+				</section>
+
+				<section>
+					<h2>OpenMPS1Dによるコード検証</h2>
+					<section class="toc">
+						<h3>目次</h3>
+						<ol class="toc">
+							<li>概要</li>
+							<li>OpenMPSとは</li>
+							<li class="recent">OpenMPS1Dによるコード検証</li>
+							<li>静水問題による妥当性確認</li>
+							<li>まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>コード検証(Verification)</h3>
+						<p>本来は、OpenMPS自体を全て直接検証するべき</p>
+						<p>→大きいため、コストが高い</p>
+					</section>
+					
+					<section>
+						<h3>コード検証の手法</h3>
+						<p>3段階に分けて実施</p>
+						<ol>
+							<li>サイズが小さく単純な1次元版を開発</li>
+							<li>1次元版を直接検証</li>
+							<li>1次元版と通常版のコードを比較</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>1次元版：OpenMps1D</h3>
+						<p><a href="https://bitbucket.org/OpenMps/openmps1d">https://bitbucket.org/OpenMps/openmps1d</a></p>
+						<ul>
+							<li>320行程度の小さいmain.cppのみ</li>
+							<li>\(z<0\)に壁（床）を配置</li>
+							<li>\(-z\)方向に重力</li>
+							<li>粘性はなし</li>
+							<li>固定時間刻みの計算結果を標準出力に出すだけ</li>
+							<li>高精度粒子法のうち、HSとHLのみ実装</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>OpenMps1D実演</h3>
+						<figure style="width: 65%">
+							<img src="img/openmps1d.png" />
+						</figure>
+					</section>
+
+					<section>
+						<h3>検証結果1：HS</h3>
+						<p><a href="https://bitbucket.org/OpenMps/openmps/pull-requests/25">Pull Requst#25</a></p>
+						<div style="font-size: 60%">
+							<div style="width: 50%; float: left">
+								<p>修正前</p>
+								<pre><code>// ダミー粒子以外
+if(type != Particle::Type::Dummy)
+{
+	const Vector dx = x - thisX;
+	const Vector du = u - thisU;
+	const auto r = boost::numeric::ublas::norm_2(dx);
+	return boost::numeric::ublas::inner_prod(dx, du) / (r*r*r);
+}
+else
+{
+	return 0.0;
+}</code></pre>
+							</div>
+							<div style="width: 50%; float: right">
+								<p>修正後</p>
+								<pre><code>// ここは粒子数密度の計算なので、対ダミー粒子も含める
+const Vector dx = x - thisX;
+const Vector du = u - thisU;
+const auto r = boost::numeric::ublas::norm_2(dx);
+return boost::numeric::ublas::inner_prod(dx, du) / (r*r*r);</code></pre>
+							</div>
+						</div>
+					</section>
+
+					<section>
+						<h3>検証結果2：標準ラプラシアン</h3>
+						<p><a href="https://bitbucket.org/OpenMps/openmps/pull-requests/26">Pull Requst#26</a></p>
+						<dl>
+							<dt>修正前</dt>
+							<dd><pre><code>// 標準MPS法：-2D/(λn0) w
+const auto a_ij = (2 * DIM / lambda * n0) * Particle::W(r, r_e);</code></pre>
+							</dd>
+							<dt>修正後</dt>
+							<dd><pre><code>// 標準MPS法：-2D/(λn0) w
+const auto a_ij = (2 * DIM / lambda / n0) * Particle::W(r, r_e);</code></pre>
+							</dd>
+						</dl>
+					</section>
+				</section>
+
+				<section>
+					<h2>静水問題による妥当性確認</h2>
+					<section class="toc">
+						<h3>目次</h3>
+						<ol class="toc">
+							<li>概要</li>
+							<li>OpenMPSとは</li>
+							<li>OpenMPS1Dによるコード検証</li>
+							<li class="recent">静水問題による妥当性確認</li>
+							<li>まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>静水問題</h3>
+						<div style="width: 90%">
+							<div style="width: 65%; float: left">
+								<ol>
+									<li>水槽に水を入れる</li>
+									<li>水深を計測＆比較</li>
+								</ol>
+								<ul>
+									<li>水槽幅：5[cm]</li>
+									<li>水槽高さ：10[cm]</li>
+									<li>初期粒子間距離：0.1[cm]</li>
+									<li>時間刻み：0.5[μs]</li>
+								</ul>
+							</div>
+							<figure style="width: 30%; float: right">
+								<video src="img/static_pressure.mp4" controls="1" loop="1" />
+							</figure>
+						</div>
+					</section>
+
+					<section>
+						<h3>確認結果</h3>
+						<figure style="width: 75%">
+							<img src="img/validation.svg" />
+							<figcaption>水深の時間変化</figcaption>
+						</figure>
+					</section>
+				</section>
+				
+				<section>
+					<h2>まとめ</h2>
+					<section class="toc">
+						<h3>目次</h3>
+						<ol class="toc">
+							<li>概要</li>
+							<li>OpenMPSとは</li>
+							<li>OpenMPS1Dによるコード検証</li>
+							<li>静水問題による妥当性確認</li>
+							<li class="recent">まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>成果</h3>
+						<ul style="font-size: 80%">
+							<li>MPSを単純化した1次元版、<strong>OpenMps1D</strong>を開発した</li>
+							<li>OpenMps1Dと本流OpenMPSを比較し、<strong>コード検証</strong>した</li>
+							<li>コード<strong>誤りが2件</strong>発見＆修正できた</li>
+							<li>静水問題で<strong>妥当性確認</strong>を実施した</li>
+							<li>高精度粒子法を用いる時、<strong>時間刻みを粗くすると体積保存に難</strong></li>
+							<li>動きの少ない問題では、時間刻みを<strong>CFL条件よりかなり細かく</strong>する必要がある</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>今後の課題</h3>
+						<ul>
+							<li>圧力・流速などの妥当性確認</li>
+							<li>水中崩壊などの動きの激しい問題でV&amp;V</li>
+							<li>他の高精度粒子法部のV&amp;V</li>
+							<li>利用者・開発者の勧誘</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>参考文献</h3>
+						<ol style="font-size: 50%">
+							<li>Koshizuka, S. and Oka, y. (1996):"Moving-Particle Semi-implicit Method for Fragmentation of Incompressible Fluid", Nucl. Sci. Eng.</li>
+							<li>OpenMPS <a href="http://openmps.bitbucket.org/">http://openmps.bitbucket.org/</a></li>
+							<li>青子守歌(2016):『粒子法オープンソース実装OpenMPSプロジェクトの開発』、オープンCAEシンポジウム2016＠東京講演概要集、A11。</li>
+							<li>Gotoh, H. and Khayyer, A. (2016):"Current achievements and future perspectives for projection-based particle methods with applications in ocean engineering", J. Ocean Eng. Mar. Energy.</li>
+							<li>OpenMps1D <a href="https://bitbucket.org/OpenMps/openmps1d">https://bitbucket.org/OpenMps/openmps1d</a></li>
+						</ol>
+					</section>
+
+					<section>
+						<p style="font-size: 300%">return 0;</p>
+					</section>
+				</section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+				slideNumber: "h.v",
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				width: 1280,
+				height: 720,
+				margin: 0,
+
+				dependencies: [
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/math/math.js', async: true }
+				]
+			});
+		</script>
+	</body>
+</html>

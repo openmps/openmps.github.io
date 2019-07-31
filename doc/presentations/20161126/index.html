@@ -1,0 +1,565 @@
+<!DOCTYPE HTML>
+<html lang="ja">
+
+	<head>
+		<meta charset="utf-8" />
+
+		<title>粒子法オープンソース実装OpenMPSプロジェクトの開発</title>
+
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML" />
+		<meta name="author" content="aokomoriuta" />
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" />
+
+		<link rel="stylesheet" href="css/reveal.css" />
+		<link rel="stylesheet" href="css/theme/white.css" id="theme" />
+
+		<link rel="stylesheet" href="index.css" />
+
+		<!-- Code syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css" />
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section>
+					<h1><span>粒子法オープンソース実装</span> <span>OpenMPSプロジェクトの開発<span></h1>
+					<p>青子守歌 (aokomoriuta)</p>
+					<div style="font-size: 60%; width: 80%; margin: auto">
+						<time style="float: left">2016/11/26</time>
+						<div style="float: right; text-decoration: underline">オープンCAEシンポジウム2016</div>
+					</div>
+				</section>
+				
+				<section>
+					<section>
+						<h3>こんな計算ができます</h3>
+						<video style="width: 70%" src="img/MPS-HS-HL-GC-ECS-DS.mp4" controls="1" autoplay="1" loop="1" />
+					</section>
+
+					<section>
+						<h3>概要</h3>
+						<ul style="font-size: 70%">
+							<li class="fragment">射影法型粒子法は、<strong>自由表面の大変形を伴う非圧縮性流れ</strong>において有用である</li>
+							<li class="fragment">OpenMPSは、稀有な、射影法型粒子法である<strong>MPS法のFLOSS実装</strong>である</li>
+							<li class="fragment">C++14で開発され高精度粒子法を取り入れるなど、<strong>最新の手法を積極的に採用</strong>する方針</li>
+							<li class="fragment"><strong>ParaViewでの可視化</strong>が標準で付属</li>
+							<li class="fragment">分散並列やGPGPU版、剛体連成なども近日公開予定である</li>
+						</ul>
+						<p style="font-size: 90%" class="fragment"><span>OpenMPSプロジェクトの発展が</span> <span>今後のオープンCAE界の発展につながるものと考え</span> <span>引き続き開発を続けていきます</span></p>
+					</section>
+				</section>
+
+				<section>
+					<h2>OpenMPS前史</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li class="recent">OpenMPS前史</li>
+							<li>OpenMPSの現在</li>
+							<li>課題と今後の展望</li>
+							<li>まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>計算手法の分類</h3>
+						<table style="font-size: 80%">
+							<thead>
+								<tr><th style="width: 1em" /><th><span class="fragment" data-fragment-index="1">オイラー形式</span></th><th class="fragment" data-fragment-index="1">ラグランジュ形式</th></tr>
+							</thead>
+							<tbody>
+								<tr><th class="fragment" data-fragment-index="2">格子法</th><td class="fragment" data-fragment-index="3"><span>FEM, VOFなど</span></td><td class="fragment" data-fragment-index="4">格子変形法など</td></tr>
+								<tr><th class="fragment" data-fragment-index="2">粒子法</th><td class="fragment" data-fragment-index="5">なし</td><td>
+									<table>
+										<thead>
+											<tr><th class="fragment" data-fragment-index="6">陽解法</th><th class="fragment" data-fragment-index="6">（半）陰解法</th></tr>
+										</thead>
+										<tbody>
+											<tr><td class="fragment" data-fragment-index="7"><span>SPH法<sup>(1)(2)</sup></span> <span>E-MPS法<sup>(3)</sup></span> など</td><span>
+												<td class="fragment" data-fragment-index="8">ISPH<sup>(4)</sup></span> <span><strong>MPS法</strong></span><sup>(5)</sup> <span>など</span></td></tr>
+										</tbody>
+									</table></td></tr>
+							</tbody>
+						</table>
+					</section>
+
+					<section>
+						<h3>射影法型？</h3>
+						<div>
+							<p>従来、<strong>半陰解法</strong>の別呼称</p>
+						</div>
+						<p>Gotoh H, Khayyer A (2016)<sup>(6)</sup>による分類(projection-based)</p>
+					</section>
+
+					<section>
+						<h3>射影法</h3>
+						<div>
+							<p>NS式に<strong>ヘルムホルツ・ホッジ分解</strong>を適用</p>
+							<p>\[ \underbrace{\mathbf{u}_{k+1}}_{発散なし} = \underbrace{\mathbf{u}_{k} +  \Delta t \left( \mathbf{f} + \nu \nabla^2 \mathbf{u} \right)}_{任意ベクトル} - \underbrace{\frac {\Delta t }{\rho} \nabla p}_{回転なし} \]</p>
+						</div>
+
+						<p>詳細はウィキペディア<a href="https://ja.wikipedia.org/wiki/?curid=3439851">[[射影法]]</a>などを参照</p>
+					</section>
+
+					<section>
+						<h3>射影法型粒子法の長所</h3>
+						<ul>
+							<li class="fragment"><strong>自由表面の大変形</strong>への追従が容易</li>
+							<li class="fragment"><strong>移流項に起因する誤差拡大</strong>が抑制できる</li>
+							<li class="fragment">非圧縮性流れの<strong>計算安定性</strong>（時間刻みを大きくできる）</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>射影法型粒子法の短所</h3>
+						<ul>
+							<li class="fragment">他の手法に比べて<strong>研究例・応用例</strong>が少ない</li>
+							<li class="fragment">公開された<strong>実装がない</strong>（試してみるには自分で書くしかない）</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>OpenMPSへ</h3>
+						<p><span>計算力学の発展には</span> <span>多くの応用・比較例が必要だ</span></p>
+						<p class="fragment">↓</p>
+						<p class="fragment"><strong>オープンソース実装</strong>を！</p>
+					</section>
+					</section>
+				</section>
+
+				<section>
+					<h2>OpenMPSの現在</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>OpenMPS前史</li>
+							<li class="recent">OpenMPSの現在</li>
+							<li>課題と今後の展望</li>
+							<li>まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>OpenMPSとは</h3>
+						<p><strong>MPS法</strong>のオープンソース実装</p>
+						<p>詳しくは<a href="http://openmps.bitbucket.io/">openmps.bitbucket.io</a>参照</p>
+					</section>
+
+					<section>
+						<h3>なぜMPS法？</h3>
+						<div>
+							<ul>
+								<li>射影法型粒子法だから</li>
+								<li>ISPHより先発であり、研究実績などが豊富だから</li>
+							</ul>
+						</div>
+						<p>※MPSとSPHは <span>もはや<strong>空間離散化手法の違い</strong>でしかない<sup>(7)</sup></span></p>
+					</section>
+
+					<section>
+						<h3>MPS法の流れ</h3>
+						<ol>
+							<li><strong>重力</strong>と<strong>粘性</strong>により移動</li>
+							<li>（粒子数）密度を保つような<strong>圧力</strong>を計算</li>
+							<li><strong>圧力勾配</strong>により移動</li>
+						</ol>
+						<figure style="width: 100%">
+							<svg viewBox="0 0 470 100" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+								<defs>
+									<circle id="particle" r="9.5" stroke="black" />
+									<g id="particle_line">
+										<use xlink:href="#particle" x="10" />
+										<use xlink:href="#particle" x="30" />
+										<use xlink:href="#particle" x="50" />
+										<use xlink:href="#particle" x="70" />
+									</g>
+									<g id="water">
+										<use xlink:href="#particle_line" y="10" fill="lightblue" />
+										<use xlink:href="#particle_line" y="30" fill="lightblue" />
+										<use xlink:href="#particle_line" y="50" fill="lightblue" />
+										<use xlink:href="#particle_line" y="70" fill="lightblue" />
+									</g>
+									<use id="wall" xlink:href="#particle_line" fill="gray" />
+
+									<polygon id="arrow_base" points="0,10 18,10 18,4 30,15 18,26 18,20 0,20" fill="yellow" stroke="black" />
+									<use id="arrow" xlink:href="#arrow_base" y="35" />
+
+									<marker id="gravity_head" viewBox="0 -5 10 10" refX="8" refY="0"
+										markerWidth="5" markerHeight="5"orient="auto-start-reverse">
+										<polygon points="0,5 10,0 0,-5" fill="black" />
+									</marker>
+									<line id="gravity_base" x1="0" y1="0" x2="0" y2="18" stroke="black" stroke-width="2" marker-end="url(#gravity_head)" />
+									<use id="gravity" xlink:href="#gravity_base" y="70" />
+
+									<marker id="pressure_head" viewBox="0 -5 10 10" refX="8" refY="0"
+										markerWidth="5" markerHeight="5"orient="auto-start-reverse">
+										<polygon points="0,5 10,0 0,-5" fill="magenta" />
+									</marker>
+									<line id="pressure_base" x1="0" y1="25" x2="0" y2="0" stroke="magenta" stroke-width="2" marker-end="url(#pressure_head)" />
+									<use id="pressure" xlink:href="#pressure_base" y="60" />
+								</defs>
+								
+								<line stroke="black" x1="0" y1="80" x2="470" y2="80" stroke-width="0.5" />
+
+								<use xlink:href="#water" x="0" y="0"/>
+								<use xlink:href="#wall"  x="0" y="90"/>
+
+								<use xlink:href="#arrow" x="90" />
+
+								<use xlink:href="#wall"  x="130" y="90"/>
+								<use xlink:href="#water" x="130" y="8"/>
+
+								<use xlink:href="#arrow" x="220" />
+
+								<use xlink:href="#wall"  x="260" y="90"/>
+								<use xlink:href="#water" x="260" y="8"/>
+
+								<use xlink:href="#arrow" x="350" />
+
+								<use xlink:href="#water" x="390" y="0"/>
+								<use xlink:href="#wall"  x="390" y="90"/>
+
+								<use xlink:href="#gravity" x="10" />
+								<use xlink:href="#gravity" x="30" />
+								<use xlink:href="#gravity" x="50" />
+								<use xlink:href="#gravity" x="70" />
+
+								<line stroke="magenta" x1="120" y1="80" x2="220" y2="80" />
+								<line stroke="magenta" x1="120" y1="88" x2="220" y2="88" />
+
+								<use xlink:href="#pressure" x="270" />
+								<use xlink:href="#pressure" x="290" />
+								<use xlink:href="#pressure" x="310" />
+								<use xlink:href="#pressure" x="330" />
+							</svg>
+						</figure>
+						<p>詳しくは参考文献<sup>(8)(9)</sup>参照</p>
+					</section>
+
+					
+					<section>
+						<h3>MPS法の粒子間相互作用モデル</h3>
+						<div style="font-size: 80%; margin: 0">
+							<dl style="width: 65%; float: left">
+								<dt>移流項</dt>
+								<dd>粒子の移動によって計算</dd>
+								<dt>圧力勾配項</dt>
+								<dd><span style="text-decoration: underline">勾配モデル</span>
+									<small>\(\displaystyle \left[ \boldsymbol{\nabla} p \right]_i = \frac{D}{n_0} \sum_{j \neq i} \frac{p_j - p_i}{r_{ij}} \frac{\boldsymbol{r_{ij}}}{r_{ij}} w \left( r_ij \right) \)</small>
+								</dd>
+								<dt>粘性項</dt>
+								<dd><span style="text-decoration: underline">ラプラシアンモデル</span>
+									<small>\(\displaystyle \left[ \boldsymbol{\nabla}^2 \phi \right]_i = \frac{2 D}{n_0 \lambda} \sum_{j \neq i} \left( \phi_j - \phi_i \right) w \left( r_ij \right) \)</small>
+								</dd>
+							</dl>
+							<div style="width: 30%; float: left; margin: 0">
+								<figure style="border: black solid 1px">
+									<svg viewBox="0 15 100 85" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+										<defs>
+											<ellipse id="gradient_shadow" rx="5" ry="2" fill="black" />
+
+											<marker id="gradient_head" viewBox="0 -5 10 10" refX="7" refY="0"
+												markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+												<polygon points="0,5 10,0 0,-5" fill="black" />
+											</marker>
+										</defs>
+										<ellipse cx="50" cy="75" rx="49" ry="20" stroke="black" fill="none" />
+
+										<use xlink:href="#gradient_shadow" x="50" y="75" />
+										<rect x="48" y="35" width="4" height="40" fill="magenta" stroke="black" stroke-width="0.5" />
+								
+										<use xlink:href="#gradient_shadow" x="20" y="80" />
+										<rect x="18" y="50" width="4" height="30" fill="rgb(0, 255, 0)" stroke="black" stroke-width="0.5" />
+
+										<use xlink:href="#gradient_shadow" x="70" y="65" />
+										<rect x="68" y="45" width="4" height="20" fill="blue" stroke="black" stroke-width="0.5" />
+
+										<use xlink:href="#gradient_shadow" x="85" y="78" />
+										<rect x="83" y="28" width="4" height="50" fill="cyan" stroke="black" stroke-width="0.5" />
+
+										<line x1="50" y1="35" x2="22" y2="49" stroke="black" stroke-width="1.5" marker-end="url(#gradient_head)" />
+										<line x1="50" y1="35" x2="69" y2="44" stroke="black" stroke-width="1.5" marker-end="url(#gradient_head)" />
+										<line x1="50" y1="35" x2="84" y2="28" stroke="black" stroke-width="1.5" marker-end="url(#gradient_head)" />
+
+										<line x1="50" y1="76" x2="20" y2="91" stroke="black" stroke-width="1"/>
+
+										<text x="48" y="28" font-size="7" font-family="Times New Roman" font-style="italic">p<tspan font-size="smaller" baseline-shift="-30%">i</tspan></text>
+										<text x="83" y="22" font-size="7" font-family="Times New Roman" font-style="italic">p<tspan font-size="smaller" baseline-shift="-30%">j</tspan></text>
+								
+										<text x="30" y="80" font-size="7" font-family="Times New Roman" font-style="italic">r<tspan font-size="smaller" baseline-shift="-10%">e</tspan></text>
+
+										<text x="51" y="82" font-size="7" font-family="Times New Roman" font-style="italic">i</text>
+										<text x="82" y="85" font-size="7" font-family="Times New Roman" font-style="italic">j</text>
+									</svg>
+									<figcaption style="font-size: small; text-decoration: underline">勾配モデル</figcaption>
+								</figure>
+								<figure style="border: black solid 1px">
+									<svg viewBox="0 30 100 70" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+										<defs>
+											<ellipse id="laplacian" rx="5" ry="2" fill="black" />
+
+											<marker id="laplacian_head" viewBox="0 -5 10 10" refX="7" refY="0"
+												markerWidth="3" markerHeight="3" orient="auto-start-reverse">
+												<polygon points="0,5 10,0 0,-5" fill="black" />
+											</marker>
+										</defs>
+										<ellipse cx="50" cy="75" rx="49" ry="20" stroke="black" fill="none" />
+
+										<use xlink:href="#laplacian" x="50" y="75" />
+										<rect x="48" y="62" width="4" height="13" fill="magenta" stroke="black" stroke-width="0.5" />
+										<rect x="48" y="55" width="4" height="7" fill="cyan" stroke="black" stroke-width="0.5" />
+										<rect x="48" y="40" width="4" height="15" fill="blue" stroke="black" stroke-width="0.5" />
+										<rect x="48" y="35" width="4" height="5" fill="rgb(0, 255, 0)" stroke="black" stroke-width="0.5" />
+								
+										<use xlink:href="#laplacian" x="20" y="80" />
+										<rect x="18" y="75" width="4" height="5" fill="rgb(0, 255, 0)" stroke="black" stroke-width="0.5" />
+
+										<use xlink:href="#laplacian" x="70" y="65" />
+										<rect x="68" y="50" width="4" height="15" fill="blue" stroke="black" stroke-width="0.5" />
+
+										<use xlink:href="#laplacian" x="85" y="78" />
+										<rect x="83" y="72" width="4" height="7" fill="cyan" stroke="black" stroke-width="0.5" />
+
+										<line x1="50" y1="37" x2="21" y2="74" stroke="black" stroke-width="1.5" marker-end="url(#gradient_head)" />
+										<line x1="50" y1="48" x2="69" y2="50" stroke="black" stroke-width="1.5" marker-end="url(#gradient_head)" />
+										<line x1="50" y1="59" x2="84" y2="72" stroke="black" stroke-width="1.5" marker-end="url(#gradient_head)" />
+
+										<line x1="50" y1="76" x2="20" y2="91" stroke="black" stroke-width="1"/>
+
+										<text x="30" y="80" font-size="7" font-family="Times New Roman" font-style="italic">r<tspan font-size="smaller" baseline-shift="-10%">e</tspan></text>
+
+										<text x="51" y="82" font-size="7" font-family="Times New Roman" font-style="italic">i</text>
+										<text x="82" y="85" font-size="7" font-family="Times New Roman" font-style="italic">j</text>
+									</svg>
+									<figcaption style="font-size: small; text-decoration: underline">ラプラシアンモデル</figcaption>
+								</figure>
+							</div>
+						</div>
+					</section>
+
+					<section>
+						<h3>OpenMPSのライセンス</h3>
+						<p>マルチライセンス</p>
+						<dl>
+							<dt>商用利用：<strong>コピーレフト</strong></dt>
+							<dd><ul>
+								<li>GPL 3.0以降</li>
+								<li>CC-BY-SA 3.0 Unported</li>
+							</ul></dd><dt>非商用利用：<strong>帰属表示のみ</strong></dt>
+							<dd><ul>
+								<li>CC-BY-NC 3.0 Unporetd</li>
+							</ul></dd>
+						</dl>
+					</section>
+
+					<section>
+						<h3>OpenMPS最新版</h3>
+						<p>現時点での最新版は<strong>v2.1</strong></p>
+						<ul>
+							<li class="fragment">最新の多くの<strong>高精度粒子法</strong>（後述）の導入</li>
+							<li class="fragment"><strong>C++14</strong>で開発</li>
+							<li class="fragment">Visual Studio/Windowsが主体（Linux, Makefileも付属）</li>
+							<li class="fragment">OpenMPによる<strong>スレッド並列</strong></li>
+							<li class="fragment">ParaViewでの<strong>可視化</strong>（.pvsmファイルの提供）</li>
+							<li class="fragment">（実験機能）<strong>3次元</strong>計算</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>導入された高精度粒子法</h3>
+						<p>オリジナルMPS法<sup>(4)</sup>を<strong>かなり改善</strong></p>
+						<ul style="font-size: 80%">
+							<li>HS法（高精度生成項）, <small>Khayyer and Gotoh (2009)</small></li>
+							<li>HL法（高精度ラプラシアン）, <small>Khayyer and Gotoh (2010)</small></li>
+							<li>GC法（勾配修正行列）, <small>Khayyer and Gotoh (2011)</small></li>
+							<li>ECS法（誤差修正項）, <small>Khayyer and Gotoh (2011)</small></li>
+							<li>DS法（動的人工斥力）, <small>Tsuruta et al. (2013)</small></li>
+						</ul>
+						<p>詳しくはGotoh and Khayyer (2016)を参照</p>
+						<p><small>※概要集では誤ってSPPも導入済みとなっていますが、SPPは導入予定です</small></p>
+					</section>
+
+					<section>
+						<h3>計算例1</h3>
+						<figure>
+							<div style="margin: 0">
+								<video style="width: 50%" src="img/MPS-HS-HL-GC-ECS-DS.mp4" controls="1" autoplay="1" loop="1" />
+							</div>
+							<figcaption>20cm四方の水槽でのダムブレーク（空間解像度：1mm）</figcaption>
+						</figure>
+					</section>
+
+					<section>
+						<h3>計算例2</h3>
+						<div style="margin: 0">
+							<video style="width: 50%" src="img/2.mp4" controls="1" autoplay="1" loop="1" />
+						</div>
+						<figcaption>8cm四方の水槽でのスロッシング？（空間解像度：0.2mm）</figcaption>
+					</section>
+
+					<section>
+						<h3>計算例2の流速ベクトル図</h3>
+						<div style="margin: 0">
+							<video style="width: 55%" src="img/2_u.mp4" controls="1" autoplay="1" loop="1" />
+						</div>
+					</section>
+				</section>
+				
+				<section>
+					<h2>課題と今後の展望</h2>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>OpenMPS前史</li>
+							<li>OpenMPSの現在</li>
+							<li class="recent">課題と今後の展望</li>
+							<li>まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>直近の開発予定</h3>
+						<p><a href="https://bitbucket.org/OpenMps/openmps/issues">BitbucketのIssues</a>より（優先度順）</p>
+						<ol>
+							<li class="fragment">Tsuruta et al. (2015)のSPPを導入</li>
+							<li class="fragment">V&amp;V</li>
+							<li class="fragment">分散並列(MPI)化 <small>（おそらく<a href="https://github.com/FDPS/FDPS">FDPS</a>の導入）</small></li>
+							<li class="fragment">SIMD化 <small>(AVX2 or AVX-512)</small></li>
+							<li class="fragment">剛体連成</li>
+							<li class="fragment">GPGPU版の公開<small>（コード自体は既に非公開レポジトリにある）</small></li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>対外発表（予定）</h3>
+						<ol>
+							<li>オープンCAE勉強会＠関東（流体など）</li>
+							<li>計算工学講演会？</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>募集</h3>
+						<dl style="font-size: 80%">
+							<dt class="fragment" data-fragment-index="1">機能要望・バグ報告</dt>
+							<dd class="fragment" data-fragment-index="1"><a href="https://bitbucket.org/OpenMps/openmps/issues">Bitbucket Issue</a>までお気軽に！</dd>
+							<dt class="fragment" data-fragment-index="2">サポート・共同研究</dt>
+							<dd class="fragment" data-fragment-index="2">「動かない」「なんか遅い」「結果が合わない」なども遠慮なくご相談ください<small>（Issue, Twitter reply/DM等へ）</small>。できる限り最大限の範囲で協力します。</dd>
+							<dt class="fragment" data-fragment-index="3">開発者</dt>
+							<dd class="fragment" data-fragment-index="3"><a href="https://bitbucket.org/OpenMps/openmps/pull-requests/">プルリク</a>もお待ちしています。</dd>
+						</dl>
+					</section>
+				</section>
+				
+				<section>
+					<section class="toc">
+						<h3>TOC</h3>
+						<ol class="toc">
+							<li>OpenMPS前史</li>
+							<li>OpenMPSの現在</li>
+							<li>課題と今後の展望</li>
+							<li class="recent">まとめ</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>まとめ</h3>
+						<ul style="font-size: 70%">
+							<li class="fragment">射影法型粒子法は、<strong>自由表面の大変形を伴う非圧縮性流れ</strong>において有用である</li>
+							<li class="fragment">OpenMPSは、稀有な、射影法型粒子法である<strong>MPS法のFLOSS実装</strong>である</li>
+							<li class="fragment">C++14で開発され高精度粒子法を取り入れるなど、<strong>最新の手法を積極的に採用</strong>する方針</li>
+							<li class="fragment"><strong>ParaViewでの可視化</strong>が標準で付属</li>
+							<li class="fragment">分散並列やGPGPU版、剛体連成なども近日公開予定である</li>
+						</ul>
+						<p style="font-size: 90%" class="fragment"><span>OpenMPSプロジェクトの発展が</span> <span>今後のオープンCAE界の発展につながるものと考え</span> <span>引き続き開発を続けていきます</span></p>
+					</section>
+					
+					<section>
+						<h3>参考文献</h3>
+						<ol style="font-size: 40%">
+							<li>R.A. Gingold and J.J. Monaghan (1977) : “Smoothed particle hydrodynamics: theory and application to non-spherical stars” Mon. Not. R. Astron. Soc., Vol 181, pp. 375–89.</li>
+							<li>L.B. Lucy (1977) : “A numerical approach to the testing of the fission hypothesis”, Astron. J., Vol 82, pp. 1013–1024.</li>
+							<li>Oochi M, Koshizuka S, Sakai M (2010): "Explicit MPS Algorithm for Free Surface Flow Analysis", Trans. JSCES, No. 20100013. (in Japanese)</li>
+							<li>Koshizuka S, Oka Y (1996): "Moving particle semi-implicit method for fragmentation of incompressible fluid", Nucl Sci Eng, 123:421–434.</li>
+							<li>Shao S, Lo EYM (2003) :”Incompressible SPH method for simulating Newtonian and non-Newtonian flows with a free surface”, Adv Water Resour, Vol. 26, 787–800.</li>
+							<li>Gotoh H, Khayyer A (2016): "Current achievements and future perspectives for projection-based particle methods with applications in ocean engineering", J Ocean Eng Mar. Energy, 2:251.</li>
+							<li>土木学会編 (2012): 『数値波動水槽 -砕波波浪計算の深化と耐波設計の革新を目指して-』、丸善出版、p.73。</li>
+							<li>越塚誠一 (2005) : 『粒子法』、計算力学レクチャーシリーズ、丸善出版。</li>
+							<li>越塚誠一、柴田和也、室谷 浩平 (2014) : 『粒子法入門」、丸善出版。</li>
+							<li>Khayyer A, Gotoh H (2009): "Modified moving particle semi-implicit methods for the prediction of 2D wave impact pressure" Coast Eng, 56:419–440.</li>
+							<li>Khayyer A, Gotoh H (2010): "A higher order laplacian model for enhancement and stabilization of pressure calculation by the MPS method", Appl Ocean Res, 32(1):124–131.</li>
+							<li>Khayyer A, Gotoh H (2011): "Enhancement of stability and accuracy of the moving particle semi-implicit method", J Comput Phys, 230:3093–3118.</li>
+							<li>Tsuruta N, Khayyer A, Gotoh H (2013): "A short note on dynamic stabilization of moving particle semi-implicit method", Comput Fluids, 82:158–164.</li>
+							<li>Tsuruta N, Khayyer A, Gotoh H (2015): "Space potential particles to enhance the stability of projection-based particle methods", Int J Comput Fluid Dyn, 29(1):100–119</li>
+						</ol>
+					</section>
+
+					<section>
+						<h3>関連リンク</h3>
+						<ul style="font-size: 80%">
+							<li>ウェブサイト： <a href="http://openmps.bitbucket.io/">openmps.bitbucket.io</a></li>
+							<li>レポジトリ： <a href="https://bitbucket.org/OpenMps/openmps">bitbucket.org/OpenMps/openmps</a></li>
+							<li>概要集＆この発表資料： ↑公式サイトからリンク</li>
+						</ul>
+					</section>
+
+					<section>
+						<p style="font-size: 300%">return 0;</p>
+						
+					</section>
+				</section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+
+			// Full list of configuration options available at:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+				slideNumber: "h.v",
+
+				width: 960,
+				height: 720,
+				margin: 0,
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				// Optional reveal.js plugins
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/math/math.js', async: true }
+				]
+			});
+		</script>
+	</body>
+</html>
